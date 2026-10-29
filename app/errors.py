@@ -57,14 +57,8 @@ def register_error_handlers(app: FastAPI) -> None:
             422, "validation_error", "Request validation failed", details
         )
 
-    @app.exception_handler(IntegrityError)
-    async def handle_integrity_error(
-        request: Request, exc: IntegrityError
-    ) -> JSONResponse:
-        logger.warning("database constraint violated: %s", exc.orig)
-        return error_response(
-            409, "constraint_violation", "The data violates a database rule"
-        )
+    
+    
 
     @app.exception_handler(OperationalError)
     async def handle_db_unavailable(
@@ -91,3 +85,13 @@ def register_error_handlers(app: FastAPI) -> None:
             "Something went wrong on our side",
             {"error_id": error_id},
         )
+
+    @app.exception_handler(IntegrityError)
+    async def handle_integrity_error(
+            request: Request, exc: IntegrityError
+        ) -> JSONResponse:
+        if getattr(exc.orig, "sqlstate", None) == "23505":  # unique violation
+            logger.warning("duplicate value: %s", exc.orig)
+            return error_response(409, "conflict", "That value already exists")
+        # Anything else means our own validation missed something: our bug.
+        return await handle_unexpected(request, exc)
