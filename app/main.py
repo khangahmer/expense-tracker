@@ -1,7 +1,8 @@
 import logging
 from collections.abc import Iterator
 
-from fastapi import Depends, FastAPI, HTTPException, Query, status
+from fastapi import Depends, FastAPI, Query, status
+from app.errors import AppError, NotFoundError, register_error_handlers
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -14,6 +15,7 @@ logging.basicConfig(level=settings.log_level)
 logger = logging.getLogger("expense_tracker")
 
 app = FastAPI(title="Expense Tracker")
+register_error_handlers(app)
 
 
 def get_db() -> Iterator[Session]:
@@ -27,7 +29,7 @@ def get_db() -> Iterator[Session]:
 def get_or_404(db: Session, expense_id: int) -> Expense:
     expense = db.get(Expense, expense_id)
     if expense is None:
-        raise HTTPException(status_code=404, detail=f"Expense {expense_id} not found")
+        raise NotFoundError("Expense", expense_id)
     return expense
 
 
@@ -73,7 +75,7 @@ def update_expense(
     changes = payload.model_dump(exclude_unset=True)
     for field, value in changes.items():
         if value is None and field != "notes":
-            raise HTTPException(status_code=422, detail=f"{field} cannot be null")
+            raise AppError(422, "validation_error", f"{field} cannot be null")
         setattr(expense, field, value)
     db.commit()
     db.refresh(expense)
@@ -86,3 +88,4 @@ def delete_expense(expense_id: int, db: Session = Depends(get_db)) -> None:
     db.delete(expense)
     db.commit()
     logger.info("deleted expense id=%s", expense_id)
+
