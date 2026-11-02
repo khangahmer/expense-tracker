@@ -9,12 +9,12 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import SessionLocal
 from app.models import Expense
-from app.schemas import ExpenseCreate, ExpenseRead, ExpenseUpdate
+from app.schemas import ExpenseCreate, ExpenseRead, ExpenseUpdate, CURRENCY_PATTERN, ConvertedExpense
 
 from decimal import ROUND_HALF_UP, Decimal
 
 from app.fx import fetch_rate
-from app.schemas import CURRENCY_PATTERN, ConvertedExpense
+
 
 logging.basicConfig(level=settings.log_level)
 logger = logging.getLogger("expense_tracker")
