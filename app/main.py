@@ -11,6 +11,11 @@ from app.database import SessionLocal
 from app.models import Expense
 from app.schemas import ExpenseCreate, ExpenseRead, ExpenseUpdate
 
+from decimal import ROUND_HALF_UP, Decimal
+
+from app.fx import fetch_rate
+from app.schemas import CURRENCY_PATTERN, ConvertedExpense
+
 logging.basicConfig(level=settings.log_level)
 logger = logging.getLogger("expense_tracker")
 
@@ -88,4 +93,27 @@ def delete_expense(expense_id: int, db: Session = Depends(get_db)) -> None:
     db.delete(expense)
     db.commit()
     logger.info("deleted expense id=%s", expense_id)
+
+
+def get_expense_dep(expense_id: int, db: Session = Depends(get_db)) -> Expense:
+    return get_or_404(db, expense_id)
+
+
+@app.get("/expenses/{expense_id}/converted", response_model=ConvertedExpense)
+async def convert_expense(
+    to: str = Query(pattern=CURRENCY_PATTERN),
+    expense: Expense = Depends(get_expense_dep),
+) -> ConvertedExpense:
+    rate = await fetch_rate(expense.currency, to)
+    converted = (Decimal(expense.amount_minor) * rate).quantize(
+        Decimal(1), rounding=ROUND_HALF_UP
+    )
+    return ConvertedExpense(
+        expense_id=expense.id,
+        original_amount_minor=expense.amount_minor,
+        original_currency=expense.currency,
+        target_currency=to,
+        rate=rate,
+        converted_amount_minor=int(converted),
+    )
 
