@@ -108,9 +108,7 @@ async def convert_expense(
     expense: Expense = Depends(get_expense_dep),
 ) -> ConvertedExpense:
     rate = await fetch_rate(expense.currency, to)
-    converted = (Decimal(expense.amount_minor) * rate).quantize(
-        Decimal(1), rounding=ROUND_HALF_UP
-    )
+    converted = (Decimal(expense.amount_minor) * rate).quantize(Decimal(1), rounding=ROUND_HALF_UP)
     return ConvertedExpense(
         expense_id=expense.id,
         original_amount_minor=expense.amount_minor,
@@ -119,4 +117,3 @@ async def convert_expense(
         rate=rate,
         converted_amount_minor=int(converted),
     )
-

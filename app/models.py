@@ -19,6 +19,4 @@ class Expense(Base):
     category: Mapped[str] = mapped_column(String(50), server_default="other")
     currency: Mapped[str] = mapped_column(String(3), server_default="USD")
     notes: Mapped[str | None] = mapped_column(String(500))
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

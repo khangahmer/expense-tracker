@@ -30,6 +30,7 @@ class ExpenseRead(ExpenseCreate):
     id: int
     created_at: datetime
 
+
 class ConvertedExpense(BaseModel):
     expense_id: int
     original_amount_minor: int

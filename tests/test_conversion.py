@@ -75,9 +75,7 @@ def test_unexpected_error_returns_generic_500(create_expense, monkeypatch):
     # Behave like a real server: respond with 500 instead of re-raising into the test.
     quiet_client = TestClient(app, raise_server_exceptions=False)
 
-    response = quiet_client.get(
-        f"/expenses/{expense['id']}/converted", params={"to": "EUR"}
-    )
+    response = quiet_client.get(f"/expenses/{expense['id']}/converted", params={"to": "EUR"})
 
     assert response.status_code == 500
     error = response.json()["error"]

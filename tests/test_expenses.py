@@ -83,10 +83,8 @@ def test_patch_expense(client):
     assert create_res.status_code == 201
     created = create_res.json()
     expense_id = created["id"]
-    
-    
-    
-    patch_res =  client.patch(f"/expenses/{expense_id}",json = {"amount_minor": 225000})
+
+    patch_res = client.patch(f"/expenses/{expense_id}", json={"amount_minor": 225000})
     assert patch_res.status_code == 200
     updated = patch_res.json()
 
@@ -96,18 +94,20 @@ def test_patch_expense(client):
     assert updated["description"] == created["description"]
     assert updated["category"] == created["category"]
 
+
 def test_patch_expense_missing_id_returns_404(client):
     missing_id = 999
     patch_res = client.patch(f"/expenses/{missing_id}", json={"amount_minor": 40000})
     assert patch_res.status_code == 404
 
+
 def test_patch_expense_null_description_returns_422(client, create_expense):
-    expense = create_expense(description = "Office Supplies")
+    expense = create_expense(description="Office Supplies")
 
     response = client.patch(f"/expenses/{expense['id']}", json={"description": None})
     assert response.status_code == 422
-    
-    
+
+
 def test_database_down_returns_503(client):
     def broken_db():
         raise OperationalError("SELECT 1", {}, Exception("db down"))

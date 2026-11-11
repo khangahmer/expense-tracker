@@ -40,9 +40,7 @@ def register_error_handlers(app: FastAPI) -> None:
         return error_response(exc.status_code, exc.code, exc.message)
 
     @app.exception_handler(StarletteHTTPException)
-    async def handle_http_error(
-        request: Request, exc: StarletteHTTPException
-    ) -> JSONResponse:
+    async def handle_http_error(request: Request, exc: StarletteHTTPException) -> JSONResponse:
         return error_response(exc.status_code, f"http_{exc.status_code}", str(exc.detail))
 
     @app.exception_handler(RequestValidationError)
@@ -53,17 +51,10 @@ def register_error_handlers(app: FastAPI) -> None:
             {"field": ".".join(str(part) for part in err["loc"]), "message": err["msg"]}
             for err in exc.errors()
         ]
-        return error_response(
-            422, "validation_error", "Request validation failed", details
-        )
-
-    
-    
+        return error_response(422, "validation_error", "Request validation failed", details)
 
     @app.exception_handler(OperationalError)
-    async def handle_db_unavailable(
-        request: Request, exc: OperationalError
-    ) -> JSONResponse:
+    async def handle_db_unavailable(request: Request, exc: OperationalError) -> JSONResponse:
         logger.error("database unavailable: %s", exc.orig)
         return error_response(
             503, "database_unavailable", "The database is temporarily unavailable"
@@ -87,9 +78,7 @@ def register_error_handlers(app: FastAPI) -> None:
         )
 
     @app.exception_handler(IntegrityError)
-    async def handle_integrity_error(
-            request: Request, exc: IntegrityError
-        ) -> JSONResponse:
+    async def handle_integrity_error(request: Request, exc: IntegrityError) -> JSONResponse:
         if getattr(exc.orig, "sqlstate", None) == "23505":  # unique violation
             logger.warning("duplicate value: %s", exc.orig)
             return error_response(409, "conflict", "That value already exists")
