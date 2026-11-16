@@ -45,7 +45,7 @@ Fields the server controls are ignored if a client sends them.
 ## Requirements
 
 - Python 3.12 or newer
-- Docker with Docker Compose (runs PostgreSQL)
+- Docker with Docker Compose (runs PostgreSQL, and optionally the API itself)
 - Git
 
 ## Quick start
@@ -102,10 +102,10 @@ The defaults match `docker-compose.yml`, so no edits are needed for local develo
 **5. Start PostgreSQL**
 
 ```
-docker compose up -d
+docker compose up -d db
 ```
 
-On its first start, this creates two databases: `expenses` (the app) and `expenses_test` (the tests). Wait about 10 seconds for PostgreSQL to finish starting; `docker compose ps` should show the `db` service as running.
+This starts only the database container (the `api` service in `docker-compose.yml` runs the whole stack in Docker, described below). On its first start it creates two databases: `expenses` (the app) and `expenses_test` (the tests). Wait a few seconds until `docker compose ps` shows the `db` service as `healthy`.
 
 **6. Create the tables**
 
@@ -129,6 +129,12 @@ curl http://127.0.0.1:8000/health
 
 ## Using the API
 
+**Windows PowerShell users, three things differ:**
+
+- Type `curl.exe`, not `curl`. Plain `curl` is an alias for a different command and shows a script-execution prompt.
+- A trailing `\` continues a line in macOS / Linux shells only. PowerShell uses a backtick (`` ` ``), or you can keep the whole command on one line.
+- Inline JSON loses its quote marks when passed to `curl.exe`, so the server answers `422` with `JSON decode error`. Put JSON bodies in a file instead, as shown below.
+
 ### Create an expense
 
 macOS / Linux:
@@ -139,11 +145,11 @@ curl -i -X POST http://127.0.0.1:8000/expenses \
   -d '{"description": "Lunch", "amount_minor": 45050, "category": "food"}'
 ```
 
-Windows (PowerShell). JSON quoting is awkward in PowerShell, so put the body in a file:
+Windows (PowerShell). The body goes in a file in your temp folder, so it cannot be committed by accident:
 
 ```
-Set-Content -Path lunch.json -Value '{"description": "Lunch", "amount_minor": 45050, "category": "food"}'
-curl.exe -i -X POST http://127.0.0.1:8000/expenses -H "Content-Type: application/json" -d "@lunch.json"
+Set-Content -Path "$env:TEMP\lunch.json" -Value '{"description": "Lunch", "amount_minor": 45050, "category": "food"}'
+curl.exe -i -X POST http://127.0.0.1:8000/expenses -H "Content-Type: application/json" -d "@$env:TEMP\lunch.json"
 ```
 
 Response (`201 Created`; `id` and `created_at` will differ):
@@ -162,18 +168,29 @@ Response (`201 Created`; `id` and `created_at` will differ):
 
 ### Read, list, update, delete
 
+(On Windows PowerShell, type `curl.exe` instead of `curl`.)
+
 ```
 curl http://127.0.0.1:8000/expenses/1
 curl "http://127.0.0.1:8000/expenses?category=food&limit=10&offset=0"
 curl -X DELETE -i http://127.0.0.1:8000/expenses/1
 ```
 
-A partial update sends only what changes (PowerShell users: use a JSON file as above):
+A partial update sends only the fields that change.
+
+macOS / Linux:
 
 ```
 curl -X PATCH http://127.0.0.1:8000/expenses/1 \
   -H "Content-Type: application/json" \
   -d '{"amount_minor": 50000}'
+```
+
+Windows (PowerShell):
+
+```
+Set-Content -Path "$env:TEMP\patch.json" -Value '{"amount_minor": 50000}'
+curl.exe -X PATCH http://127.0.0.1:8000/expenses/1 -H "Content-Type: application/json" -d "@$env:TEMP\patch.json"
 ```
 
 ### Convert to another currency
@@ -259,6 +276,8 @@ alembic downgrade -1      # undo the last migration
 alembic current           # which migration this database is at
 ```
 
+**Careful:** a downgrade runs a migration backwards, which can **delete data**. Downgrading the currency migration, for example, drops the `currency` column and everything stored in it. Use downgrades on development databases only. A database left one step behind the code makes the running API fail, so run `alembic upgrade head` when you are done experimenting.
+
 ## Running the checks
 
 With the virtual environment active and the database container running:
@@ -299,7 +318,9 @@ docker compose exec db psql -U expense -d expenses -c "CREATE DATABASE expenses_
 │   └── test_conversion.py
 ├── scripts/check.ps1    # runs every check (Windows)
 ├── docker/initdb/       # creates the test database on first start
-├── docker-compose.yml   # local PostgreSQL
+├── docker-compose.yml   # PostgreSQL and the API
+├── Dockerfile           # image for the API
+├── .dockerignore        # files kept out of the image
 ├── alembic.ini
 ├── pyproject.toml       # ruff and mypy configuration
 ├── pytest.ini
@@ -321,11 +342,37 @@ docker compose exec db psql -U expense -d expenses -c "CREATE DATABASE expenses_
 - **Unexpected database constraint violations return a generic 500**, not a 4xx, because reaching a database `CHECK` means the API's own validation missed something, which is the server's fault.
 - **Two layers of validation on purpose**: Pydantic rejects bad input at the front door, and database constraints (`CHECK`, `NOT NULL`) remain the last line of defense.
 
-## Docker image and deployment
+## Run the whole stack in Docker
 
-<!-- TODO (Lessons 14-15): document building the app image, running the full
-     stack with Docker Compose, the public URL, required environment variables
-     on the host, and how the deployed API was verified. -->
+The `Dockerfile` builds an image of the API, and `docker-compose.yml` runs it together with PostgreSQL, so the only thing you need installed is Docker.
+
+```
+docker compose up -d --build
+```
+
+Then open http://127.0.0.1:8000/docs. When the API container starts, it applies any pending database migrations and then launches the server. It waits until PostgreSQL reports healthy before starting.
+
+Stop everything with:
+
+```
+docker compose down
+```
+
+Add `-v` (`docker compose down -v`) to also delete the database data.
+
+Things worth knowing:
+
+- Stop any locally running `uvicorn` first. It and the container both use port 8000.
+- Inside the Compose network, the API reaches the database at the host name `db`, not `127.0.0.1` (inside a container, `127.0.0.1` means the container itself). `DATABASE_URL` for the container is set in `docker-compose.yml`.
+- Your `.env` file is not copied into the image (see `.dockerignore`), so secrets are never baked into it.
+- The image contains only what is needed to run the app (no tests or development tools), and it runs as a non-root user.
+- The server listens on the port given by the `PORT` environment variable, defaulting to 8000, so hosting platforms that assign a port work without changes.
+- To work on the code with auto-reload, start only the database (`docker compose up -d db`) and run `uvicorn` locally, as in the Quick start.
+
+## Deployment
+
+<!-- TODO (Lesson 15): the live URL, the environment variables required on the
+     host, how migrations run there, and how the deployed API was verified. -->
 
 Not yet documented.
 
