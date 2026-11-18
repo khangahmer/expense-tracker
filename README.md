@@ -371,10 +371,49 @@ Things worth knowing:
 
 ## Deployment
 
-<!-- TODO (Lesson 15): the live URL, the environment variables required on the
-     host, how migrations run there, and how the deployed API was verified. -->
+The API is deployed and publicly reachable:
 
-Not yet documented.
+- **Live URL:** https://expense-tracker-production-c30233d3.up.railway.app
+- **Interactive docs:** https://expense-tracker-production-c30233d3.up.railway.app/docs
+- **Deployed:** 18 November 2026
+
+### How it is hosted
+
+| Part | Service | Notes |
+|------|---------|-------|
+| API | Railway | Built from this repository's `Dockerfile`. Redeploys automatically on every push to `main` |
+| Database | Neon (PostgreSQL), Singapore region | Free plan. The database suspends when idle and wakes on the next query |
+
+Settings on the host are entered in Railway's **Variables** tab and are never committed to Git:
+
+| Variable | Value |
+|----------|-------|
+| `DATABASE_URL` | The Neon connection string, starting with `postgresql+psycopg://` and ending with `?sslmode=require` |
+| `LOG_LEVEL` | `INFO` |
+
+Railway supplies `PORT` itself, and the container listens on it (see the `CMD` in the `Dockerfile`). When a container starts, it runs `alembic upgrade head` before launching the server, so each deployment migrates the database automatically.
+
+To ship a change: run the checks locally, then push to `main`. Railway rebuilds and redeploys.
+
+### Verifying the live API
+
+Replace `BASE` with the live URL above. On Windows PowerShell, type `curl.exe`, not `curl`.
+
+```
+curl -i BASE/health
+curl -i BASE/expenses
+curl -i "BASE/expenses/1/converted?to=EUR"
+curl -i BASE/expenses/99999
+curl -i "BASE/expenses/1/converted?to=eur"
+```
+
+Expected results: `200`, `200`, `200` (needs an expense with id 1 and calls the exchange-rate API from the server), `404` with code `not_found`, and `422` with code `validation_error`. The `/docs` page offers the same operations interactively, and creating a record there and then reading it back confirms the database connection.
+
+### Limitations of this deployment
+
+- **Free trial hosting.** Railway's trial gives a limited one-time credit that lasts up to 30 days, so the service may stop when the credit runs out.
+- **Slower first request after idle time.** The database suspends when idle, so the first query after a quiet period can take a moment longer.
+- **Public and unauthenticated.** Anyone with the URL can read and change the data, so do not store anything private in it.
 
 ## AI-assisted development
 
